@@ -1,0 +1,104 @@
+{{- if .Values.mongodb.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-pv
+  labels:
+    app: mongodb
+    component: database
+spec:
+  capacity:
+    storage: {{ .Values.mongodb.persistence.size }}
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ .Values.global.storageClass }}
+  hostPath:
+    path: {{ .Values.global.hostPath }}/mongodb
+    type: DirectoryOrCreate
+{{- end }}
+
+{{- if .Values.redis.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-pv
+  labels:
+    app: redis
+    component: cache
+spec:
+  capacity:
+    storage: {{ .Values.redis.persistence.size }}
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ .Values.global.storageClass }}
+  hostPath:
+    path: {{ .Values.global.hostPath }}/redis
+    type: DirectoryOrCreate
+{{- end }}
+
+{{- if .Values.rabbitmq.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: rabbitmq-pv
+  labels:
+    app: rabbitmq
+    component: message-broker
+spec:
+  capacity:
+    storage: {{ .Values.rabbitmq.persistence.size }}
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ .Values.global.storageClass }}
+  hostPath:
+    path: {{ .Values.global.hostPath }}/rabbitmq
+    type: DirectoryOrCreate
+{{- end }}
+
+{{- if .Values.zookeeper.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: zookeeper-pv
+  labels:
+    app: zookeeper
+    component: coordination
+spec:
+  capacity:
+    storage: {{ .Values.zookeeper.persistence.size }}
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ .Values.global.storageClass }}
+  hostPath:
+    path: {{ .Values.global.hostPath }}/zookeeper
+    type: DirectoryOrCreate
+{{- end }}
+
+{{- if .Values.kafka.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: kafka-pv
+  labels:
+    app: kafka
+    component: message-broker
+spec:
+  capacity:
+    storage: {{ .Values.kafka.persistence.size }}
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ .Values.global.storageClass }}
+  hostPath:
+    path: {{ .Values.global.hostPath }}/kafka
+    type: DirectoryOrCreate
+{{- end }}

@@ -1,0 +1,211 @@
+# Example values file for Order App Helm Chart
+# Copy this file and customize for your environment
+
+# Global settings
+global:
+  namespace: dev
+  storageClass: local-storage
+  hostPath: /opt/order-app-data
+
+# StorageClass settings
+storageClass:
+  create: true
+  volumeBindingMode: WaitForFirstConsumer
+  reclaimPolicy: Retain
+
+# Application settings
+app:
+  name: order-app
+  replicaCount: 1
+  image:
+    repository: myregistry.example.com/order-app
+    tag: "1.0.2"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+  env:
+    port: "8080"
+    appVersion: "1.0.2"
+    ginMode: "release"
+
+# Ingress settings
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hosts:
+    - host: order-app.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # Uncomment for TLS
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  # Uncomment for TLS
+  # tls:
+  #   - secretName: order-app-tls
+  #     hosts:
+  #       - order-app.example.com
+
+# Vault CSI Driver settings
+vault:
+  enabled: true
+  serviceAccount:
+    name: order-app-sa
+  address: "http://vault-vault.vault.svc.cluster.local:8200"
+  role: "application-order-role"
+  secretProviderClass:
+    name: vault-order-app
+
+# MongoDB settings
+mongodb:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: mongo
+    tag: "7-jammy"
+    pullPolicy: IfNotPresent
+
+  service:
+    port: 27017
+
+  persistence:
+    enabled: true
+    size: 20Gi
+
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+  env:
+    initDbDatabase: "shipments_db"
+
+# Redis settings
+redis:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+
+  service:
+    port: 6379
+
+  persistence:
+    enabled: true
+    size: 10Gi
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+# Kafka settings
+kafka:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: confluentinc/cp-kafka
+    tag: "7.5.0"
+    pullPolicy: IfNotPresent
+
+  service:
+    port: 9092
+    internalPort: 29092
+
+  persistence:
+    enabled: true
+    size: 20Gi
+
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "1000m"
+    limits:
+      memory: "4Gi"
+      cpu: "2000m"
+
+  env:
+    brokerId: "1"
+    topic: "order.created"
+    groupId: "shipment-service"
+    offsetsTopicReplicationFactor: "1"
+    autoCreateTopicsEnable: "true"
+
+# Zookeeper settings
+zookeeper:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: confluentinc/cp-zookeeper
+    tag: "7.5.0"
+    pullPolicy: IfNotPresent
+
+  service:
+    port: 2181
+
+  persistence:
+    enabled: true
+    size: 10Gi
+
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+  env:
+    clientPort: "2181"
+    tickTime: "2000"
+
+# RabbitMQ settings
+rabbitmq:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: rabbitmq
+    tag: "3.12-management-alpine"
+    pullPolicy: IfNotPresent
+
+  service:
+    amqpPort: 5672
+    managementPort: 15672
+
+  persistence:
+    enabled: true
+    size: 10Gi
+
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+  env:
+    defaultUser: "admin"
+    defaultPass: "change-me-in-production"
+    queue: "shipment.ready"

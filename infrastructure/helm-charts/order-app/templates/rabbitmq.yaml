@@ -1,0 +1,183 @@
+{{- if .Values.rabbitmq.enabled }}
+---
+# ServiceAccount для RabbitMQ
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rabbitmq-sa
+  namespace: {{ .Values.global.namespace }}
+automountServiceAccountToken: true
+
+---
+# SecretProviderClass для RabbitMQ секретов из Vault
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: vault-secret-rabbitmq
+  namespace: {{ .Values.global.namespace }}
+spec:
+  provider: vault
+  parameters:
+    vaultAddress: {{ .Values.vault.address | quote }}
+    roleName: "rabbitmq-role"
+    objects: |
+      - objectName: "username"
+        secretPath: "secret/data/app/rabbitmq"
+        secretKey: "username"
+      - objectName: "password"
+        secretPath: "secret/data/app/rabbitmq"
+        secretKey: "password"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rabbitmq.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: {{ .Values.rabbitmq.service.amqpPort }}
+      name: amqp
+      targetPort: {{ .Values.rabbitmq.service.amqpPort }}
+    - port: {{ .Values.rabbitmq.service.managementPort }}
+      name: management
+      targetPort: {{ .Values.rabbitmq.service.managementPort }}
+  clusterIP: None
+  selector:
+    app: rabbitmq
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rabbitmq.labels" . | nindent 4 }}
+spec:
+  serviceName: rabbitmq
+  replicas: {{ .Values.rabbitmq.replicaCount }}
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+        component: message-broker
+    spec:
+      serviceAccountName: rabbitmq-sa
+      automountServiceAccountToken: true
+      tolerations: []
+      nodeSelector:
+        node-role.kubernetes.io/worker: "worker"
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+
+      volumes:
+        - name: secrets-ram
+          emptyDir:
+            medium: Memory
+        - name: vault-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: "vault-secret-rabbitmq"
+{{- if not .Values.rabbitmq.persistence.enabled }}
+        - name: rabbitmq-data
+          emptyDir: {}
+{{- end }}
+
+      initContainers:
+        - name: vault-init
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |
+              echo "Копируем секреты из CSI mount в RAM-backed emptyDir..."
+              for file in /mnt/vault/*; do
+                cat "$file" > "/mnt/secrets/$(basename $file)"
+              done
+              echo "Секреты скопированы успешно"
+          volumeMounts:
+            - name: vault-secrets
+              mountPath: /mnt/vault
+              readOnly: true
+            - name: secrets-ram
+              mountPath: /mnt/secrets
+
+        - name: fix-permissions
+          image: busybox
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "-c", "chown -R 999:999 /var/lib/rabbitmq"]
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
+
+      containers:
+        - name: rabbitmq
+          image: "{{ .Values.rabbitmq.image.repository }}:{{ .Values.rabbitmq.image.tag }}"
+          imagePullPolicy: {{ .Values.rabbitmq.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.rabbitmq.service.amqpPort }}
+              name: amqp
+            - containerPort: {{ .Values.rabbitmq.service.managementPort }}
+              name: management
+          env:
+            - name: RABBITMQ_ERLANG_COOKIE
+              value: "secretcookie"
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              export RABBITMQ_DEFAULT_USER=$(cat /mnt/secrets/username)
+              export RABBITMQ_DEFAULT_PASS=$(cat /mnt/secrets/password)
+              echo "Starting RabbitMQ with user: $RABBITMQ_DEFAULT_USER"
+              exec docker-entrypoint.sh rabbitmq-server
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
+            - name: secrets-ram
+              mountPath: /mnt/secrets
+              readOnly: true
+          livenessProbe:
+            exec:
+              command:
+                - rabbitmq-diagnostics
+                - ping
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - rabbitmq-diagnostics
+                - check_port_connectivity
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.rabbitmq.resources | nindent 12 }}
+  {{- if .Values.rabbitmq.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: rabbitmq-data
+        labels:
+          {{- include "rabbitmq.labels" . | nindent 10 }}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: {{ .Values.global.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.rabbitmq.persistence.size }}
+  {{- end }}
+{{- end }}

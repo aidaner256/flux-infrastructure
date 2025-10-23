@@ -1,0 +1,147 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.app.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.app.service.type }}
+  ports:
+    - port: {{ .Values.app.service.port }}
+      targetPort: {{ .Values.app.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    app: {{ .Values.app.name }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.app.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.app.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.app.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.app.name }}
+        component: application
+    spec:
+      tolerations: []
+      nodeSelector:
+        node-role.kubernetes.io/worker: "worker"
+      serviceAccountName: {{ include "order-app.serviceAccountName" . }}
+      automountServiceAccountToken: true
+
+      volumes:
+        - name: secrets-ram
+          emptyDir:
+            medium: Memory
+        - name: vault-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ .Values.vault.secretProviderClass.name | quote }}
+
+      initContainers:
+        - name: vault-init
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |
+              echo "Копируем секреты из CSI mount в RAM-backed emptyDir..."
+              for file in /mnt/vault/*; do
+                cat "$file" > "/mnt/secrets/$(basename $file)"
+              done
+              echo "Секреты скопированы успешно!"
+          volumeMounts:
+            - name: vault-secrets
+              mountPath: /mnt/vault
+              readOnly: true
+            - name: secrets-ram
+              mountPath: /mnt/secrets
+
+      containers:
+        - name: {{ .Values.app.name }}
+          image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag }}"
+          imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.app.service.port }}
+              name: http
+              protocol: TCP
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Loading secrets from /mnt/secrets..."
+
+              # Экспорт секретов MongoDB
+              export MONGO_HOST=$(cat /mnt/secrets/mongo-host)
+              export MONGO_PORT=$(cat /mnt/secrets/mongo-port)
+              export MONGO_DATABASE=$(cat /mnt/secrets/mongo-database)
+              export MONGO_USER=$(cat /mnt/secrets/mongo-user)
+              export MONGO_PASSWORD=$(cat /mnt/secrets/mongo-password)
+
+              # Экспорт секретов Redis
+              export REDIS_HOST=$(cat /mnt/secrets/redis-host)
+              export REDIS_PORT=$(cat /mnt/secrets/redis-port)
+              export REDIS_PASSWORD=$(cat /mnt/secrets/redis-password)
+
+              # Экспорт секретов RabbitMQ
+              export RABBITMQ_HOST=$(cat /mnt/secrets/rabbitmq-host)
+              export RABBITMQ_PORT=$(cat /mnt/secrets/rabbitmq-port)
+              export RABBITMQ_USER=$(cat /mnt/secrets/rabbitmq-user)
+              export RABBITMQ_PASSWORD=$(cat /mnt/secrets/rabbitmq-password)
+              export RABBITMQ_QUEUE=$(cat /mnt/secrets/rabbitmq-queue)
+
+              # Экспорт конфигурации приложения
+              export PORT=$(cat /mnt/secrets/port)
+              export APP_VERSION=$(cat /mnt/secrets/app-version)
+              export GIN_MODE=$(cat /mnt/secrets/gin-mode)
+
+              # Экспорт Kafka конфигурации
+              export KAFKA_BROKERS=$(cat /mnt/secrets/kafka-brokers)
+              export KAFKA_TOPIC=$(cat /mnt/secrets/kafka-topic)
+              export KAFKA_GROUP_ID=$(cat /mnt/secrets/kafka-group-id)
+
+              echo "All secrets loaded successfully!"
+              echo "Starting order-app..."
+
+              exec /app/main
+
+          volumeMounts:
+            - name: secrets-ram
+              mountPath: /mnt/secrets
+              readOnly: true
+
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: {{ .Values.app.service.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: {{ .Values.app.service.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          resources:
+            {{- toYaml .Values.app.resources | nindent 12 }}

@@ -1,0 +1,209 @@
+{{- if .Values.orderServicePy.enabled }}
+---
+# ServiceAccount для order-service-py
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.orderServicePy.serviceAccount.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: order-service-py
+automountServiceAccountToken: true
+
+---
+# SecretProviderClass для order-service-py
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: {{ .Values.orderServicePy.vault.secretProviderClass.name }}
+  namespace: {{ .Values.global.namespace }}
+spec:
+  provider: vault
+  parameters:
+    vaultAddress: {{ .Values.vault.address | quote }}
+    roleName: {{ .Values.orderServicePy.vault.role | quote }}
+    objects: |
+      - objectName: "postgres-host"
+        secretPath: "secret/data/app/postgres"
+        secretKey: "host"
+      - objectName: "postgres-port"
+        secretPath: "secret/data/app/postgres"
+        secretKey: "port"
+      - objectName: "postgres-db"
+        secretPath: "secret/data/app/postgres"
+        secretKey: "database"
+      - objectName: "postgres-user"
+        secretPath: "secret/data/app/postgres"
+        secretKey: "user"
+      - objectName: "postgres-password"
+        secretPath: "secret/data/app/postgres"
+        secretKey: "password"
+      - objectName: "redis-host"
+        secretPath: "secret/data/app/redis"
+        secretKey: "host"
+      - objectName: "redis-port"
+        secretPath: "secret/data/app/redis"
+        secretKey: "port"
+      - objectName: "redis-password"
+        secretPath: "secret/data/app/redis"
+        secretKey: "password"
+      - objectName: "kafka-bootstrap-servers"
+        secretPath: "secret/data/app/order-service-py"
+        secretKey: "kafka-bootstrap-servers"
+      - objectName: "kafka-topic"
+        secretPath: "secret/data/app/order-service-py"
+        secretKey: "kafka-topic"
+      - objectName: "port"
+        secretPath: "secret/data/app/order-service-py"
+        secretKey: "port"
+      - objectName: "app-version"
+        secretPath: "secret/data/app/order-service-py"
+        secretKey: "app-version"
+      - objectName: "debug"
+        secretPath: "secret/data/app/order-service-py"
+        secretKey: "debug"
+
+---
+# Service для order-service-py
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.orderServicePy.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: {{ .Values.orderServicePy.name }}
+    component: application
+spec:
+  type: {{ .Values.orderServicePy.service.type }}
+  ports:
+    - port: {{ .Values.orderServicePy.service.port }}
+      targetPort: {{ .Values.orderServicePy.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    app: {{ .Values.orderServicePy.name }}
+
+---
+# Deployment для order-service-py
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.orderServicePy.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: {{ .Values.orderServicePy.name }}
+    component: application
+spec:
+  replicas: {{ .Values.orderServicePy.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.orderServicePy.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.orderServicePy.name }}
+        component: application
+    spec:
+      tolerations: []
+      nodeSelector:
+        kubernetes.io/hostname: worker
+      serviceAccountName: {{ .Values.orderServicePy.serviceAccount.name }}
+      automountServiceAccountToken: true
+
+      volumes:
+        - name: secrets-ram
+          emptyDir:
+            medium: Memory
+        - name: vault-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ .Values.orderServicePy.vault.secretProviderClass.name | quote }}
+
+      initContainers:
+        - name: vault-init
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |
+              echo "Копируем секреты из CSI mount в RAM-backed emptyDir..."
+              for file in /mnt/vault/*; do
+                cat "$file" > "/mnt/secrets/$(basename $file)"
+              done
+              echo "Секреты скопированы успешно!"
+          volumeMounts:
+            - name: vault-secrets
+              mountPath: /mnt/vault
+              readOnly: true
+            - name: secrets-ram
+              mountPath: /mnt/secrets
+
+      containers:
+        - name: {{ .Values.orderServicePy.name }}
+          image: "{{ .Values.orderServicePy.image.repository }}:{{ .Values.orderServicePy.image.tag }}"
+          imagePullPolicy: {{ .Values.orderServicePy.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.orderServicePy.service.port }}
+              name: http
+              protocol: TCP
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Loading secrets from /mnt/secrets..."
+
+              # Экспорт секретов PostgreSQL
+              export POSTGRES_HOST=$(cat /mnt/secrets/postgres-host)
+              export POSTGRES_PORT=$(cat /mnt/secrets/postgres-port)
+              export POSTGRES_DB=$(cat /mnt/secrets/postgres-db)
+              export POSTGRES_USER=$(cat /mnt/secrets/postgres-user)
+              export POSTGRES_PASSWORD=$(cat /mnt/secrets/postgres-password)
+
+              # Экспорт секретов Redis
+              export REDIS_HOST=$(cat /mnt/secrets/redis-host)
+              export REDIS_PORT=$(cat /mnt/secrets/redis-port)
+              export REDIS_PASSWORD=$(cat /mnt/secrets/redis-password)
+
+              # Экспорт Kafka конфигурации
+              export KAFKA_BOOTSTRAP_SERVERS=$(cat /mnt/secrets/kafka-bootstrap-servers)
+              export KAFKA_TOPIC=$(cat /mnt/secrets/kafka-topic)
+
+              # Экспорт конфигурации приложения
+              export PORT=$(cat /mnt/secrets/port)
+              export APP_VERSION=$(cat /mnt/secrets/app-version)
+              export DEBUG=$(cat /mnt/secrets/debug)
+
+              echo "All secrets loaded successfully!"
+              echo "Starting order-service-py..."
+
+              exec uvicorn app.main:app --host 0.0.0.0 --port {{ .Values.orderServicePy.service.port }}
+
+          volumeMounts:
+            - name: secrets-ram
+              mountPath: /mnt/secrets
+              readOnly: true
+
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.orderServicePy.healthPath }}
+              port: {{ .Values.orderServicePy.service.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.orderServicePy.healthPath }}
+              port: {{ .Values.orderServicePy.service.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          resources:
+            {{- toYaml .Values.orderServicePy.resources | nindent 12 }}
+{{- end }}

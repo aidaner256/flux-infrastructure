@@ -1,0 +1,79 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: order-app
+  namespace: dev
+spec:
+  interval: 5m
+  targetNamespace: dev
+  # Автоматическое обновление при изменении values
+  upgrade:
+    remediation:
+      retries: 3
+    cleanupOnFail: true
+  # Откат при ошибке
+  rollback:
+    timeout: 5m
+    cleanupOnFail: true
+  chart:
+    spec:
+      chart: ./infrastructure/helm-charts/order-app
+      sourceRef:
+        kind: GitRepository
+        name: infrastructure-repo
+        namespace: flux-system
+      interval: 1m
+  values:
+    # Override values from helm-charts/order-app/values.yaml
+    global:
+      namespace: dev
+      storageClass: local-storage
+      hostPath: /opt/order-app-data
+
+    app:
+      name: order-app
+      replicaCount: 1
+      image:
+        repository: docker.io/aidaner2561/order-app
+        tag: "v1.0.1" # {"$imagepolicy": "flux-system:order-app:tag"}
+        pullPolicy: IfNotPresent
+
+    ingress:
+      enabled: true
+      ingressClassName: nginx
+      hosts:
+        - host: app.local
+          paths:
+            - path: /
+              pathType: Prefix
+
+    vault:
+      enabled: true
+      address: "http://vault-vault.vault.svc.cluster.local:8200"
+      role: "application-order-role"
+
+    mongodb:
+      enabled: true
+
+    redis:
+      enabled: true
+
+    kafka:
+      enabled: true
+
+    zookeeper:
+      enabled: true
+
+    rabbitmq:
+      enabled: true
+
+    orderServicePy:
+      enabled: true
+      image:
+        repository: docker.io/aidaner2561/order-app-py
+        tag: "v1.0.5" # {"$imagepolicy": "flux-system:order-app-py:tag"}
+      ingress:
+        enabled: true
+        host: app-py.local
+        path: /
+        pathType: Prefix

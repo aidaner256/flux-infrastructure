@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: golang-servicemonitor
+  namespace: monitoring
+  labels:
+    release: monitoring-prometheus 
+spec:
+  selector:
+    matchLabels:
+      app: order-app
+  namespaceSelector:
+    matchNames:
+      - dev
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s

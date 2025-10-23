@@ -1,0 +1,79 @@
+{{- if .Values.vault.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.vault.serviceAccount.name }}
+  namespace: {{ .Values.global.namespace }}
+automountServiceAccountToken: true
+
+---
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: {{ .Values.vault.secretProviderClass.name }}
+  namespace: {{ .Values.global.namespace }}
+spec:
+  provider: vault
+  parameters:
+    vaultAddress: {{ .Values.vault.address | quote }}
+    roleName: {{ .Values.vault.role | quote }}
+    objects: |
+      - objectName: "mongo-host"
+        secretPath: "secret/data/app/mongo"
+        secretKey: "host"
+      - objectName: "mongo-port"
+        secretPath: "secret/data/app/mongo"
+        secretKey: "port"
+      - objectName: "mongo-database"
+        secretPath: "secret/data/app/mongo"
+        secretKey: "database"
+      - objectName: "mongo-user"
+        secretPath: "secret/data/app/mongo"
+        secretKey: "user"
+      - objectName: "mongo-password"
+        secretPath: "secret/data/app/mongo"
+        secretKey: "password"
+      - objectName: "redis-host"
+        secretPath: "secret/data/app/redis"
+        secretKey: "host"
+      - objectName: "redis-port"
+        secretPath: "secret/data/app/redis"
+        secretKey: "port"
+      - objectName: "redis-password"
+        secretPath: "secret/data/app/redis"
+        secretKey: "password"
+      - objectName: "kafka-brokers"
+        secretPath: "secret/data/app/order-app"
+        secretKey: "kafka-brokers"
+      - objectName: "kafka-topic"
+        secretPath: "secret/data/app/order-app"
+        secretKey: "kafka-topic"
+      - objectName: "kafka-group-id"
+        secretPath: "secret/data/app/order-app"
+        secretKey: "kafka-group-id"
+      - objectName: "rabbitmq-host"
+        secretPath: "secret/data/app/rabbitmq"
+        secretKey: "host"
+      - objectName: "rabbitmq-port"
+        secretPath: "secret/data/app/rabbitmq"
+        secretKey: "port"
+      - objectName: "rabbitmq-user"
+        secretPath: "secret/data/app/rabbitmq"
+        secretKey: "username"
+      - objectName: "rabbitmq-password"
+        secretPath: "secret/data/app/rabbitmq"
+        secretKey: "password"
+      - objectName: "rabbitmq-queue"
+        secretPath: "secret/data/app/order-app"
+        secretKey: "rabbitmq-queue"
+      - objectName: "port"
+        secretPath: "secret/data/app/order-app"
+        secretKey: "port"
+      - objectName: "app-version"
+        secretPath: "secret/data/app/order-app"
+        secretKey: "app-version"
+      - objectName: "gin-mode"
+        secretPath: "secret/data/app/order-app"
+        secretKey: "gin-mode"
+{{- end }}

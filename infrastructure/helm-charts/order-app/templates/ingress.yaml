@@ -1,0 +1,59 @@
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "order-app.fullname" . }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.ingressClassName }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ $.Values.app.name }}
+                port:
+                  number: {{ $.Values.app.service.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}
+
+{{- if and .Values.orderServicePy.enabled .Values.orderServicePy.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: order-service-py-ingress
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: {{ .Values.orderServicePy.name }}
+    component: application
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: {{ .Values.ingress.ingressClassName }}
+  rules:
+    - host: {{ .Values.orderServicePy.ingress.host | quote }}
+      http:
+        paths:
+          - path: {{ .Values.orderServicePy.ingress.path }}
+            pathType: {{ .Values.orderServicePy.ingress.pathType }}
+            backend:
+              service:
+                name: {{ .Values.orderServicePy.name }}
+                port:
+                  number: {{ .Values.orderServicePy.service.port }}
+{{- end }}

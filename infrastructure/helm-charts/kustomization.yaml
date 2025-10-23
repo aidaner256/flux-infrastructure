@@ -1,0 +1,5 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# This kustomization file is for managing Helm charts
+# Charts are referenced from apps via HelmRelease resources
+resources: []

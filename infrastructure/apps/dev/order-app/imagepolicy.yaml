@@ -1,0 +1,41 @@
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: order-app
+  namespace: flux-system
+spec:
+  image: docker.io/aidaner2561/order-app
+  interval: 1m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: order-app
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: order-app
+  policy:
+    semver:
+      range: 1.0.x  # Или используйте numerical для любых тегов
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: order-app-py
+  namespace: flux-system
+spec:
+  image: docker.io/aidaner2561/order-app-py
+  interval: 1m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: order-app-py
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: order-app-py
+  policy:
+    semver:
+      range: 1.0.x

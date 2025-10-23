@@ -1,0 +1,64 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: opensearch-dashboards
+  namespace: flux-system
+spec:
+  interval: 5m
+  targetNamespace: logging
+  install:
+    createNamespace: true
+  upgrade:
+    remediation:
+      remediateLastFailure: true
+    cleanupOnFail: true
+    force: true
+  chart:
+    spec:
+      chart: opensearch-dashboards
+      sourceRef:
+        kind: HelmRepository
+        name: opensearch
+        namespace: flux-system
+      version: "3.3.0"
+  values:
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+    securityContext:
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+
+    opensearchHosts: "http://opensearch-cluster-master.logging.svc.cluster.local:9200"
+
+    config:
+      opensearch_dashboards.yml: |
+        server.host: '0.0.0.0'
+        opensearch.hosts: [http://opensearch-cluster-master.logging.svc.cluster.local:9200]
+        opensearch.ssl.verificationMode: none
+        opensearch.username: ""
+        opensearch.password: ""
+        opensearch.requestHeadersAllowlist: [authorization, securitytenant]
+
+    ingress:
+      enabled: true
+      ingressClassName: nginx
+      hosts:
+        - host: kibana.local
+          paths:
+            - path: /
+              backend:
+                serviceName: opensearch-dashboards
+                servicePort: 5601
+
+    extraEnvs:
+      - name: DISABLE_SECURITY_DASHBOARDS_PLUGIN
+        value: "true"

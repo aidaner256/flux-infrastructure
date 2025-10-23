@@ -1,0 +1,182 @@
+{{- if .Values.mongodb.enabled }}
+---
+# ServiceAccount для MongoDB
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mongodb-sa
+  namespace: {{ .Values.global.namespace }}
+automountServiceAccountToken: true
+
+---
+# SecretProviderClass для MongoDB секретов из Vault
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: vault-secret-mongodb
+  namespace: {{ .Values.global.namespace }}
+spec:
+  provider: vault
+  parameters:
+    vaultAddress: {{ .Values.vault.address | quote }}
+    roleName: "mongodb-role"
+    objects: |
+      - objectName: "username"
+        secretPath: "secret/data/app/mongo"
+        secretKey: "user"
+      - objectName: "password"
+        secretPath: "secret/data/app/mongo"
+        secretKey: "password"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "mongodb.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: {{ .Values.mongodb.service.port }}
+      name: mongodb
+      targetPort: {{ .Values.mongodb.service.port }}
+  clusterIP: None
+  selector:
+    app: mongodb
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "mongodb.labels" . | nindent 4 }}
+spec:
+  serviceName: mongodb
+  replicas: {{ .Values.mongodb.replicaCount }}
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+        component: database
+    spec:
+      serviceAccountName: mongodb-sa
+      automountServiceAccountToken: true
+      tolerations: []
+      nodeSelector:
+        kubernetes.io/hostname: worker
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+
+      volumes:
+        - name: secrets-ram
+          emptyDir:
+            medium: Memory
+        - name: vault-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: "vault-secret-mongodb"
+{{- if not .Values.mongodb.persistence.enabled }}
+        - name: mongodb-data
+          emptyDir: {}
+{{- end }}
+        - name: mongodb-config
+          emptyDir: {}
+
+      initContainers:
+        - name: vault-init
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |
+              echo "Копируем секреты из CSI mount в RAM-backed emptyDir..."
+              for file in /mnt/vault/*; do
+                cat "$file" > "/mnt/secrets/$(basename $file)"
+              done
+              echo "Секреты скопированы успешно"
+          volumeMounts:
+            - name: vault-secrets
+              mountPath: /mnt/vault
+              readOnly: true
+            - name: secrets-ram
+              mountPath: /mnt/secrets
+
+        - name: fix-permissions
+          image: busybox
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "-c", "chown -R 999:999 /var/lib/mongodb"]
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /var/lib/mongodb
+
+      containers:
+        - name: mongodb
+          image: "{{ .Values.mongodb.image.repository }}:{{ .Values.mongodb.image.tag }}"
+          imagePullPolicy: {{ .Values.mongodb.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.mongodb.service.port }}
+              name: mongodb
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              export MONGO_INITDB_ROOT_USERNAME=$(cat /mnt/secrets/username)
+              export MONGO_INITDB_ROOT_PASSWORD=$(cat /mnt/secrets/password)
+              export MONGO_INITDB_DATABASE="{{ .Values.mongodb.env.initDbDatabase }}"
+              echo "Starting MongoDB with authentication..."
+              exec docker-entrypoint.sh mongod
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+            - name: mongodb-config
+              mountPath: /data/configdb
+            - name: secrets-ram
+              mountPath: /mnt/secrets
+              readOnly: true
+          livenessProbe:
+            exec:
+              command:
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.mongodb.resources | nindent 12 }}
+{{- if .Values.mongodb.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: mongodb-data
+        labels:
+          {{- include "mongodb.labels" . | nindent 10 }}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: {{ .Values.global.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.mongodb.persistence.size }}
+{{- end }}
+{{- end }}
