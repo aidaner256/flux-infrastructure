@@ -29,15 +29,13 @@ spec:
       namespace: dev
       storageClass: local-storage
       hostPath: /opt/order-app-data
-
     app:
       name: order-app
       replicaCount: 1
       image:
         repository: docker.io/aidaner2561/order-app
-        tag: "v1.0.1" # {"$imagepolicy": "flux-system:order-app:tag"}
+        tag: "v1.0.2" # {"$imagepolicy": "flux-system:order-app:tag"}
         pullPolicy: IfNotPresent
-
     ingress:
       enabled: true
       ingressClassName: nginx
@@ -46,27 +44,20 @@ spec:
           paths:
             - path: /
               pathType: Prefix
-
     vault:
       enabled: true
       address: "http://vault-vault.vault.svc.cluster.local:8200"
       role: "application-order-role"
-
     mongodb:
       enabled: true
-
     redis:
       enabled: true
-
     kafka:
       enabled: true
-
     zookeeper:
       enabled: true
-
     rabbitmq:
       enabled: true
-
     orderServicePy:
       enabled: true
       image:
