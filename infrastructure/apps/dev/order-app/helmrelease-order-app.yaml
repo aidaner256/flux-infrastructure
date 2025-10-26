@@ -34,7 +34,7 @@ spec:
       replicaCount: 1
       image:
         repository: docker.io/aidaner2561/order-app
-        tag: "v1.0.2" # {"$imagepolicy": "flux-system:order-app:tag"}
+        tag: "v1.0.3" # {"$imagepolicy": "flux-system:order-app:tag"}
         pullPolicy: IfNotPresent
     ingress:
       enabled: true
