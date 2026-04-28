@@ -36,6 +36,7 @@ spec:
         app: zookeeper
         component: coordination
     spec:
+      automountServiceAccountToken: false
       tolerations: []
       nodeSelector:
         node-role.kubernetes.io/worker: "worker"
@@ -49,6 +50,13 @@ spec:
           securityContext:
             runAsUser: 0
           command: ["sh", "-c", "chown -R 1000:1000 /var/lib/zookeeper/data"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
           volumeMounts:
             - name: zookeeper-data
               mountPath: /var/lib/zookeeper/data

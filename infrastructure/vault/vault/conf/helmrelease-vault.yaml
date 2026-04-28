@@ -42,7 +42,7 @@ spec:
 
       image:
         repository: "hashicorp/vault"
-        tag: "1.21.0-rc1"
+        tag: "1.18.4"
         pullPolicy: IfNotPresent
 
       logLevel: "info"

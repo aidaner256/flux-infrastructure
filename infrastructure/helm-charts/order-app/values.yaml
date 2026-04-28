@@ -72,7 +72,7 @@ mongodb:
   replicaCount: 1
   image:
     repository: mongo
-    tag: "7-jammy"
+    tag: "7.0.14"
     pullPolicy: IfNotPresent
 
   service:
@@ -99,7 +99,7 @@ redis:
   replicaCount: 1
   image:
     repository: redis
-    tag: "7-alpine"
+    tag: "7.2.4-alpine"
     pullPolicy: IfNotPresent
 
   service:
@@ -183,7 +183,7 @@ rabbitmq:
   replicaCount: 1
   image:
     repository: rabbitmq
-    tag: "3.12-management-alpine"
+    tag: "3.12.14-management-alpine"
     pullPolicy: IfNotPresent
 
   service:
