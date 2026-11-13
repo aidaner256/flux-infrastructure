@@ -1,0 +1,4 @@
+# Add environments here when apps appear: - dev  /  - prod
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []

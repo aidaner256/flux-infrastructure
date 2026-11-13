@@ -1,0 +1,6 @@
+# Infrastructure index: one line per component (its ks.yaml).
+# Comment a line out -> prune removes the component.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - metallb/ks.yaml
