@@ -1,0 +1,27 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: flux-system
+  annotations:
+    fluxcd.controlplane.io/reconcileEvery: "1h"
+spec:
+  distribution:
+    version: "2.x"
+    registry: "ghcr.io/fluxcd"
+  components:
+    - source-controller
+    - kustomize-controller
+    - helm-controller
+    - notification-controller
+    - image-automation-controller
+    - image-reflector-controller
+  cluster:
+    type: kubernetes
+    networkPolicy: true
+  sync:
+    kind: GitRepository
+    url: ssh://git@github.com/aidaner256/flux-infrastructure
+    ref: refs/heads/main
+    path: clusters/lab
+    pullSecret: flux-system
